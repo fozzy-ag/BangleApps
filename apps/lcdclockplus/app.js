@@ -78,6 +78,7 @@ Bangle.setUI({
   }});
 // Load widgets
 Bangle.loadWidgets();
+require("widget_utils").swipeOn();
 // Work out sizes
 let R = Bangle.appRect;
 R.x+=1;
