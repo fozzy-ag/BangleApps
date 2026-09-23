@@ -1,0 +1,18 @@
+{
+  "id": "nohrm",
+  "name": "No HRM",
+  "shortName": "No HRM",
+  "version": "0.01",
+  "author": "fozzy-ag",
+  "description": "AI - No HRM - a Bangle.js 2 boot app that fully disables the heart rate monitor on any watchface/app. Power figures: https://www.espruino.com/Bangle.js2#power-consumption",
+  "icon": "app.png",
+  "screenshots": [{"url": "screenshot.png"}],
+  "type": "bootloader",
+  "tags": "tool,system,health",
+  "supports": ["BANGLEJS2"],
+  "allow_emulator": true,
+  "readme": "README.md",
+  "storage": [
+    {"name": "nohrm.boot.js", "url": "boot.js"}
+  ]
+}

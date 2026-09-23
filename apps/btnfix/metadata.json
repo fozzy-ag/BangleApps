@@ -1,0 +1,15 @@
+{
+  "id": "btnfix",
+  "name": "Button Launcher Fix",
+  "shortName": "BtnFix",
+  "version": "0.01",
+  "author": "fozzy-ag",
+  "description": "Fixes Bangle.js 2 clocks where a short BTN1 press fails to open the launcher. Installs a persistent, self-healing BTN1 watch that only takes over when the clock has no button handler of its own.",
+  "icon": "app.png",
+  "type": "bootloader",
+  "tags": "system,tool",
+  "supports": ["BANGLEJS2"],
+  "storage": [
+    {"name": "btnfix.boot.js", "url": "boot.js"}
+  ]
+}

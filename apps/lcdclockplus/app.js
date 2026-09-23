@@ -73,6 +73,7 @@ let clockInfoDraw = (itm, info, options) => {
 };
 
 // Show launcher when middle button pressed
+if (Bangle.setHRMPower) Bangle.setHRMPower(0, "lcdclockplus");
 Bangle.setUI({
   mode : "clock",
   remove : function() {

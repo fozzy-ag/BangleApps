@@ -1,0 +1,18 @@
+{
+  "id": "nogps",
+  "name": "No GPS",
+  "shortName": "No GPS",
+  "version": "0.01",
+  "author": "fozzy-ag",
+  "description": "Fully disables the GPS. Runs at boot and forces the GPS off for every attempt to enable it, regardless of which watchface or app is used. Uninstall to restore normal GPS behaviour.",
+  "icon": "app.png",
+  "screenshots": [{"url": "screenshot.png"}],
+  "type": "bootloader",
+  "tags": "tool,system",
+  "supports": ["BANGLEJS2"],
+  "allow_emulator": true,
+  "readme": "README.md",
+  "storage": [
+    {"name": "nogps.boot.js", "url": "boot.js"}
+  ]
+}

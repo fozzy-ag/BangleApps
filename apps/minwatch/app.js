@@ -1,187 +1,214 @@
 {
-  let drawInterval;
-  var charging = false;
-  var lc = require("locale");
-  var cachedWeather = null;
-  var cachedWeatherTime = 0;
-  var cachedWeekNum = -1;
-  var cachedWeekDay = -1;
+  let drawTimeout;
+  let charging = false;
+  let onCharging = function(c) {
+    try { charging = c; drawChargingIcon(); } catch(e) {}
+  };
+  let lc = require("locale");
+  let storage = require("Storage");
+  let cachedWeather = null;
+  let cachedWeatherTime = 0;
+  let cachedWeekNum = -1;
+  let cachedWeekKey = "";
+  let cachedSteps = 0;
+  let lastStepRead = 0;
+
+  let W = g.getWidth(), H = g.getHeight();
+  let cx = W >> 1;
+  let gap = 8;
+  let bh = 7;
+  let th = g.setFont("6x8", 4).getFontHeight();
+  let sh = g.setFont("6x8", 2).getFontHeight();
+  let appTop = 24, appH = H - 24;
+
+  function cacheAppRect() {
+    appTop = Bangle.appRect ? Math.max(Bangle.appRect.y, 24) : 24;
+    appH = Bangle.appRect ? Math.min(Bangle.appRect.h, H - 24) : H - 24;
+  }
+
+  function queueDraw() {
+    if (drawTimeout) clearTimeout(drawTimeout);
+    drawTimeout = setTimeout(function() {
+      drawTimeout = undefined;
+      draw();
+    }, Math.max(1, 60000 - (Date.now() % 60000)));
+  }
 
   function getWeekNumber(d) {
-    var day = d.getDate();
-    if (day === cachedWeekDay) return cachedWeekNum;
-    d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    var dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    cachedWeekNum = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-    cachedWeekDay = day;
+    let key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+    if (key === cachedWeekKey) return cachedWeekNum;
+    let date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    let dayNum = date.getDay() || 7;
+    date.setDate(date.getDate() + 4 - dayNum);
+    let yearStart = new Date(date.getFullYear(), 0, 1);
+    cachedWeekNum = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+    cachedWeekKey = key;
     return cachedWeekNum;
   }
 
   function getWeather() {
-    var now = Date.now();
-    if (cachedWeather !== null && now - cachedWeatherTime < 300000) return cachedWeather;
-    var wd = null;
-    try { wd = require("Storage").readJSON("weather.json"); } catch(e) {}
-    var w = wd && wd.weather ? wd.weather : null;
-    cachedWeather = w && w.temp !== undefined ? w : null;
+    let now = Date.now();
+    if (cachedWeather !== null && now - cachedWeatherTime < 3600000) return cachedWeather;
+    let wd = null;
+    try { wd = storage.readJSON("weather.json"); } catch(e) {}
+    let w = wd && wd.weather ? wd.weather : null;
+    cachedWeather = w && typeof w.temp === "number" ? w : null;
     cachedWeatherTime = now;
     return cachedWeather;
   }
 
-  function drawWeatherIcon(cx, cy, code) {
+  function onStep() {
+    let now = Date.now();
+    if (now - lastStepRead < 1000) return;
+    lastStepRead = now;
+    try { cachedSteps = Bangle.getHealthStatus("day").steps || 0; } catch(e) {}
+  }
+
+  function drawWeatherIcon(ox, oy, code) {
     if (code === undefined || code === null) return;
-    g.setColor(0);
+    g.setColor(g.theme.fg);
     if (code === 800) {
-      g.fillCircle(cx, cy, 4);
-      for (var i = 0; i < 8; i++) {
-        var a = i * 0.785;
-        g.drawLine(cx + Math.cos(a) * 6, cy + Math.sin(a) * 6,
-                   cx + Math.cos(a) * 8, cy + Math.sin(a) * 8);
+      g.fillCircle(ox, oy, 4);
+      for (let i = 0; i < 8; i++) {
+        let a = i * 0.785;
+        g.drawLine(ox + Math.cos(a) * 6, oy + Math.sin(a) * 6,
+                   ox + Math.cos(a) * 8, oy + Math.sin(a) * 8);
       }
     } else if (code >= 801 && code <= 804) {
-      g.fillCircle(cx + 4, cy - 3, 3);
-      g.fillCircle(cx - 2, cy, 5);
-      g.fillCircle(cx + 4, cy, 4);
+      g.fillCircle(ox + 4, oy - 3, 3);
+      g.fillCircle(ox - 2, oy, 5);
+      g.fillCircle(ox + 4, oy, 4);
     } else if (code >= 701 && code <= 741) {
-      g.drawLine(cx - 6, cy - 3, cx + 6, cy - 3);
-      g.drawLine(cx - 4, cy, cx + 4, cy);
-      g.drawLine(cx - 6, cy + 3, cx + 6, cy + 3);
+      g.drawLine(ox - 6, oy - 3, ox + 6, oy - 3);
+      g.drawLine(ox - 4, oy, ox + 4, oy);
+      g.drawLine(ox - 6, oy + 3, ox + 6, oy + 3);
     } else if ((code >= 300 && code <= 321) || (code >= 500 && code <= 531)) {
-      g.fillCircle(cx - 2, cy - 2, 4);
-      g.fillCircle(cx + 3, cy - 2, 3);
-      g.fillCircle(cx, cy - 4, 3);
-      g.fillPoly([cx-3,cy+2, cx-2,cy+5, cx-1,cy+2]);
-      g.fillPoly([cx+1,cy+3, cx+2,cy+6, cx+3,cy+3]);
+      g.fillCircle(ox - 2, oy - 2, 4);
+      g.fillCircle(ox + 3, oy - 2, 3);
+      g.fillCircle(ox, oy - 4, 3);
+      g.fillPoly([ox-3,oy+2, ox-2,oy+5, ox-1,oy+2]);
+      g.fillPoly([ox+1,oy+3, ox+2,oy+6, ox+3,oy+3]);
     } else if (code >= 600 && code <= 622) {
-      g.fillCircle(cx - 2, cy - 2, 4);
-      g.fillCircle(cx + 3, cy - 2, 3);
-      g.fillCircle(cx, cy - 4, 3);
-      g.fillCircle(cx - 3, cy + 3, 1);
-      g.fillCircle(cx + 1, cy + 4, 1);
-      g.fillCircle(cx + 4, cy + 3, 1);
+      g.fillCircle(ox - 2, oy - 2, 4);
+      g.fillCircle(ox + 3, oy - 2, 3);
+      g.fillCircle(ox, oy - 4, 3);
+      g.fillCircle(ox - 3, oy + 3, 1);
+      g.fillCircle(ox + 1, oy + 4, 1);
+      g.fillCircle(ox + 4, oy + 3, 1);
     } else if (code >= 200 && code <= 232) {
-      g.fillCircle(cx - 2, cy - 3, 4);
-      g.fillCircle(cx + 3, cy - 3, 3);
-      g.fillCircle(cx, cy - 5, 3);
-      g.fillPoly([cx,cy, cx-2,cy+3, cx+1,cy+3, cx-1,cy+6]);
+      g.fillCircle(ox - 2, oy - 3, 4);
+      g.fillCircle(ox + 3, oy - 3, 3);
+      g.fillCircle(ox, oy - 5, 3);
+      g.fillPoly([ox,oy, ox-2,oy+3, ox+1,oy+3, ox-1,oy+6]);
     } else {
-      g.fillCircle(cx - 2, cy, 4);
-      g.fillCircle(cx + 3, cy, 3);
-      g.fillCircle(cx, cy - 2, 3);
+      g.fillCircle(ox - 2, oy, 4);
+      g.fillCircle(ox + 3, oy, 3);
+      g.fillCircle(ox, oy - 2, 3);
     }
   }
 
-  function drawBatteryBar(cx, y) {
-    var filled = Math.round(E.getBattery() / 10);
-    for (var i = 0; i < 10; i++) {
-      g.setColor(i < filled ? (filled <= 2 ? 0xF800 : filled <= 4 ? 0xFE60 : 0x07E0) : 0xC618);
-      var x = cx - 59 + i * 12;
+  function drawBatteryBar(y, filled) {
+    for (let i = 0; i < 10; i++) {
+      let shouldFill = i < filled;
+      let color = shouldFill ? (filled <= 2 ? 0xF800 : filled <= 4 ? 0xFE60 : 0x07E0) : 0xC618;
+      g.setColor(color);
+      let x = cx - 59 + i * 12;
       g.fillRect(x, y, x + 9, y + 6);
     }
   }
 
   function drawChargingIcon() {
-    var W = g.getWidth();
-    var cx = W - 12, cy = 166;
-    g.setColor(0xFFFF);
-    g.fillRect(W - 22, 158, W, 175);
+    let appBottom = appTop + appH;
+    let cx2 = W - 12, cy2 = appBottom - 10;
+    g.setColor(g.theme.bg);
+    g.fillRect(W - 22, appBottom - 18, W, appBottom - 1);
     if (charging) {
       g.setColor(0xFE60);
-      g.fillCircle(cx, cy - 3, 3);
-      g.fillRect(cx - 1, cy, cx + 1, cy + 6);
-      g.fillPoly([cx - 2, cy + 3, cx, cy + 7, cx + 2, cy + 3]);
+      g.fillCircle(cx2, cy2 - 3, 3);
+      g.fillRect(cx2 - 1, cy2, cx2 + 1, cy2 + 6);
+      g.fillPoly([cx2 - 2, cy2 + 3, cx2, cy2 + 7, cx2 + 2, cy2 + 3]);
     }
   }
 
   function draw() {
     try {
-      var W = g.getWidth();
-      var H = g.getHeight();
-      var cx = W >> 1;
-      var date = new Date();
-      var appTop = Bangle.appRect ? Bangle.appRect.y : 24;
-      var appH = Bangle.appRect ? Bangle.appRect.h : H - 24;
-
-      var w = getWeather();
-      var hasWeather = w !== null;
-
-      var gap = 8;
-      var th = g.setFont("6x8", 4).getFontHeight();
-      var sh = g.setFont("6x8", 2).getFontHeight();
-      var bh = 7;
-      var totalH = th + sh + sh + bh + (hasWeather ? sh + 8 : 0) + sh + gap * 5;
-      var y = appTop + (appH - totalH) / 2 + 16;
-
       g.reset();
-      g.setColor(0xFFFF);
-      g.fillRect(0, appTop, W, H);
+      let date = new Date();
+      let w = getWeather();
+      let hasWeather = w !== null;
+      let appBottom = appTop + appH;
+      let totalH = th + sh + sh + bh + (hasWeather ? sh : 0) + sh + gap * (hasWeather ? 5 : 4);
+      let y = appTop + (appH - totalH) / 2;
       g.setFontAlign(0, -1);
-      g.setColor(0);
-
+      g.setColor(g.theme.fg);
+      g.setBgColor(g.theme.bg);
+      g.clearRect(0, appTop, W - 1, appBottom - 19);
+      g.clearRect(0, appBottom - 18, W - 23, appBottom - 1);
       try {
         g.setFont("6x8", 4);
         g.drawString(lc.time(date, 1), cx, y, true);
-        y += th + gap;
       } catch(e) {}
-
+      y += th + gap;
       try {
         g.setFont("6x8", 2);
-        var dateStr = lc.dow(date, 1) + " " + lc.date(date, 1);
+        let dateStr = lc.dow(date, 1) + " " + lc.date(date, 1);
         if (g.stringWidth(dateStr) > W - 10) dateStr = lc.date(date, 1);
         if (g.stringWidth(dateStr) > W - 10) dateStr = lc.dow(date, 1);
         g.drawString(dateStr, cx, y, true);
-        y += sh + gap;
-      } catch(e) {}
-
+      } catch(e) { g.setFontAlign(0, -1); }
+      y += sh + gap;
       try {
+        g.setFont("6x8", 2);
         g.drawString("CW " + getWeekNumber(date), cx, y, true);
-        y += sh + gap;
-      } catch(e) {}
-
+      } catch(e) { g.setFontAlign(0, -1); }
+      y += sh + gap;
       try {
-        drawBatteryBar(cx, y);
-        y += bh + gap;
+        g.setFont("6x8", 2);
+        drawBatteryBar(y, Math.round(E.getBattery() / 10));
       } catch(e) {}
-
+      y += bh + gap;
       try {
         if (hasWeather) {
-          drawWeatherIcon(cx - 24, y + 8, w.code);
+          if (w.code !== undefined) drawWeatherIcon(cx - 24, y + 8, w.code);
           g.setFontAlign(-1, -1);
+          g.setFont("6x8", 2);
           g.drawString(Math.round(w.temp - 273.15) + "\u00B0C", cx - 11, y, true);
           g.setFontAlign(0, -1);
-          y += sh + gap;
         }
-      } catch(e) {
-        g.setFontAlign(0, -1);
-      }
-
+      } catch(e) { g.setFontAlign(0, -1); }
+      if (hasWeather) y += sh + gap;
       try {
-        g.drawString(Bangle.getStepCount() + " steps", cx, y, true);
+        g.setFont("6x8", 2);
+        g.drawString(Math.min(cachedSteps, 99999) + " steps", cx, y, true);
       } catch(e) {}
-
     } catch(e) {}
     drawChargingIcon();
+    queueDraw();
   }
+
+  let onLcdPower = function(on) {
+    if (on) draw();
+  };
 
   if (Bangle.setHRMPower) Bangle.setHRMPower(0, "minwatch");
-  if (Bangle.on) {
-    Bangle.on('charging', function(c) {
-      charging = c;
-      drawChargingIcon();
-    });
-  }
+
+  if (Bangle.on) Bangle.on('charging', onCharging);
+  if (Bangle.on) Bangle.on('lcdPower', onLcdPower);
+  if (Bangle.on) Bangle.on('step', onStep);
 
   Bangle.setUI({mode:"clock", remove:function() {
-    if (drawInterval !== undefined) { clearInterval(drawInterval); drawInterval = undefined; }
-    if (Bangle.removeAllListeners) Bangle.removeAllListeners('charging');
-  }});
-  g.setColor(0xFFFF);
-  g.fillRect(0, 0, g.getWidth(), g.getHeight());
+    if (drawTimeout !== undefined) { clearTimeout(drawTimeout); drawTimeout = undefined; }
+    if (Bangle.removeListener) Bangle.removeListener('charging', onCharging);
+    if (Bangle.removeListener) Bangle.removeListener('lcdPower', onLcdPower);
+    if (Bangle.removeListener) Bangle.removeListener('step', onStep);
+  }, redraw:draw});
+  cacheAppRect();
+  g.reset();
+  if (Bangle.appRect) g.clearRect(Bangle.appRect);
   Bangle.loadWidgets();
-  Bangle.drawWidgets();
+  setTimeout(Bangle.drawWidgets, 0);
   if (Bangle.isCharging) charging = Bangle.isCharging();
+  drawChargingIcon();
+  onStep();
   draw();
-  drawInterval = setInterval(draw, 60000);
 }
